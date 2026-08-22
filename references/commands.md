@@ -1,22 +1,27 @@
-# xb CLI 命令参考（搜狐号场景）
+# agent-browser 命令参考（isolated-browser 路线）
 
-xb CLI v1.2.0。**所有 xb 调用必须封装在 Node.js 脚本中执行**，避免 PowerShell 中文乱码。
+通过 isolated-browser skill 拉起隔离 Chrome，再用全局 `agent-browser` CLI 经 `--cdp` 直连驱动。**所有调用必须封装在 Node.js 脚本中执行**，避免 PowerShell 中文乱码。注意：只传 `--cdp`，**不要**传 `--profile`（会挂起卡死）。
 
 ---
 
 ## 基本格式
 
 ```javascript
-// Node.js 封装
-function xb(args, timeout = 30000) {
+// Node.js 封装（lib.js 中的 ab()）
+const AB = process.env.AGENT_BROWSER_PATH || 'agent-browser'; // 期望在 PATH 中，或用 `where agent-browser` 解析
+const CDP_PORT = 9222;
+
+function ab(args, timeout = 30000) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('node', [XB_PATH, ...args], {
+    const proc = spawn(AB, ['--cdp', String(CDP_PORT), ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      shell: true, // Windows 下执行 .cmd 需要 shell 解释
     });
     let out = '';
-    const timer = setTimeout(() => { proc.kill(); reject(new Error('timeout')); }, timeout);
+    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} reject(new Error('timeout')); }, timeout);
     proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.stderr.on('data', (d) => { out += d.toString(); });
     proc.on('close', (code) => { clearTimeout(timer); resolve({ code, out }); });
     proc.on('error', reject);
   });
@@ -24,13 +29,13 @@ function xb(args, timeout = 30000) {
 
 // 辅助函数
 async function snapshot() {
-  const r = await xb(['run', '--browser', 'chrome', 'snapshot', '-i'], 25000);
-  return JSON.parse(r.out).data?.result?.data?.snapshot || '';
+  const r = await ab(['snapshot', '-i'], 20000);
+  return r.out || ''; // 纯文本 ref 列表，与 xb 同格式
 }
 
 async function getUrl() {
-  const r = await xb(['run', '--browser', 'chrome', 'get', 'url'], 10000);
-  return JSON.parse(r.out).data?.result?.data?.url || '';
+  const r = await ab(['get', 'url'], 10000);
+  return (r.out || '').trim(); // 纯文本 URL（非 JSON）
 }
 ```
 
@@ -41,15 +46,15 @@ async function getUrl() {
 ### 打开 URL
 
 ```javascript
-await xb(['run', '--browser', 'chrome', 'open', 'https://mp.sohu.com'], 25000);
-await sleep(5000);
+await ab(['open', 'https://mp.sohu.com'], 25000);
+await sleep(3000);
 ```
 
 ### 获取 snapshot
 
 ```javascript
 const snap = await snapshot();
-// snap 是字符串，每行一个元素，含 ref
+// snap 是纯文本，每行一个元素，含 ref（与 xb 同格式）
 // 示例：
 // - textbox "请输入邮箱/手机号" [ref=e20]
 // - checkbox "我已阅读并同意" [ref=e22]
@@ -60,71 +65,47 @@ const snap = await snapshot();
 ### 获取当前 URL
 
 ```javascript
-const url = await getUrl();
+const url = await getUrl(); // 纯文本，如 https://mp.sohu.com/...
 ```
 
 ### 填写表单（标准 HTML input，登录页用）
 
 ```javascript
 // fill 参数直接写值，不加任何引号！
-await xb(['run', '--browser', 'chrome', 'fill', '@e20', '13414054304']);
-await xb(['run', '--browser', 'chrome', 'fill', '@e21', '密码']);
+await ab(['fill', '@e20', '13414054304'], 15000);
+await ab(['fill', '@e21', '密码'], 15000);
 ```
 
 ### 点击元素
 
 ```javascript
-// 点击复选框（协议）
-await xb(['run', '--browser', 'chrome', 'click', '@e22']);
-
-// 点击 iframe body（聚焦正文编辑器，但 xb type 不生效）
-await xb(['run', '--browser', 'chrome', 'click', 'iframe body']);
-
-// 点击按钮
-await xb(['run', '--browser', 'chrome', 'click', '@e13']);
-```
-
-### 按键
-
-```javascript
-// 回车（在 type 之后分段用，但正文写入应该用 JS eval）
-await xb(['run', '--browser', 'chrome', 'press', 'Enter'], 10000);
+await ab(['click', '@e22'], 15000);          // 复选框（协议）
+await ab(['click', '@e13'], 15000);          // 按钮
+await ab(['click', '@e63'], 15000);          // listitem 发布
 ```
 
 ### 截图
 
 ```javascript
-const ssR = await xb(['run', '--browser', 'chrome', 'screenshot', '--full'], 15000);
-const ssPath = JSON.parse(ssR.out).data?.result?.data?.path || '';
+const r = await ab(['screenshot', 'C:\\path\\out.png'], 15000);
+// code === 0 表示成功，图片写入指定路径
 ```
 
 ### 执行 JavaScript
 
 ```javascript
 // eval --base64：JS 代码 base64 编码后传入
-// 返回值通过 JSON.parse(r.out).data?.result?.data 获取
-const script = `(function() {
-  return document.title;
-})()`;
-
-const r = await xb(['run', '--browser', 'chrome', 'eval', '--base64',
-  Buffer.from(script).toString('base64')], 15000);
-const result = JSON.parse(r.out).data?.result?.data || '';
+// 返回值 JSON-stringified（需 JSON.parse 还原），如 "搜狐"
+const script = `(function() { return document.title; })()`;
+const r = await ab(['eval', '--base64', Buffer.from(script).toString('base64')], 15000);
+const raw = (r.out || '').trim();
+let result = raw;
+try { result = JSON.parse(raw); } catch (e) {}
 ```
 
 ---
 
 ## 搜狐号常用 ref（经验证）
-
-### 登录页
-
-| 元素 | 搜索关键词 | 典型 ref | 说明 |
-|------|-----------|---------|------|
-| 手机号 | `textbox "请输入邮箱/手机号"` | e20 | |
-| 密码 | `textbox "请输入密码"` | e21 | |
-| 协议勾选 | `checkbox "我已阅读并同意"` | e22 | 缩进较深，需字符串包含查找 |
-| 登录按钮 | `button "登录"`（第二个） | e13 | e3 是其他按钮，取较大 ref |
-| 自动登录 | `checkbox "下次自动登录"` | e23 | 非必须 |
 
 ### 发布页
 
@@ -144,26 +125,16 @@ const result = JSON.parse(r.out).data?.result?.data || '';
 ## ref 解析方法
 
 ```javascript
-// 登录页 ref 解析（经验证正确）
+// 标题 ref 解析
 const snap = await snapshot();
-let phoneRef = '', pwdRef = '', agreeRef = '', submitRef = '';
-
+let titleRef = '';
+let inIframe = false;
 for (const line of snap.split('\n')) {
-  if (line.includes('textbox') && line.includes('邮箱/手机号')) {
-    const m = line.match(/ref=(e\d+)/);
-    if (m) phoneRef = m[1];
-  }
-  if (line.includes('textbox') && line.includes('密码')) {
-    const m = line.match(/ref=(e\d+)/);
-    if (m) pwdRef = m[1];
-  }
-  if (line.includes('checkbox') && line.includes('我已阅读并同意')) {
-    const m = line.match(/ref=(e\d+)/);
-    if (m) agreeRef = m[1];
-  }
-  if (line.includes('button') && line.includes('"登录"')) {
-    const m = line.match(/ref=(e\d+)/);
-    if (m) submitRef = m[1];  // 取最后一个匹配（e13 是真正的登录按钮）
+  if (/Iframe\s*\[ref=/.test(line)) { inIframe = true; continue; }
+  if (inIframe) continue;
+  if (/标题/.test(line) && /\[ref=(e\d+)\]/.test(line)) {
+    const m = line.match(/\[ref=(e\d+)\]/);
+    if (m) { titleRef = m[1]; break; }
   }
 }
 
@@ -181,7 +152,7 @@ for (const line of snap.split('\n')) {
 
 ## 正文写入（唯一有效方法）
 
-xb type 不生效，**必须用 JS eval**：
+agent-browser `type` 不生效，**必须用 JS eval**（注意返回值 JSON.parse）：
 
 ```javascript
 const html = article.body.map(p => '<p>' + p + '</p>').join('');
@@ -200,31 +171,35 @@ const setScript = `(function() {
   return 'NOT_FOUND';
 })()`;
 
-const r = await xb(['run', '--browser', 'chrome', 'eval', '--base64',
-  Buffer.from(setScript).toString('base64')], 15000);
-const result = JSON.parse(r.out).data?.result?.data || '';
-// result 应为 "SET_LEN_xxx" 格式，表示正文长度
+const r = await ab(['eval', '--base64', Buffer.from(setScript).toString('base64')], 15000);
+const raw = (r.out || '').trim();
+let resultData = raw;
+try { resultData = JSON.parse(raw); } catch (e) {}
+// resultData 应为 "SET_LEN_xxx" 格式，表示正文长度
 ```
 
 ---
 
-## 验证码检测
+## 验证码 / 登录检测
 
-验证码在**点登录之后**才出现：
+遵循 isolated-browser「登录不填密码」原则：不自动填密码，登录由用户手动完成。
 
 ```javascript
-await xb(['run', '--browser', 'chrome', 'click', '@' + submitRef], 10000);
-await sleep(3000);
-
 const snap = await snapshot();
+// 未登录态：页面同时含「登录」与「注册」
+const needLogin = snap.includes('登录') && snap.includes('注册');
+// 验证码关键词
 const captchaKeywords = ['滑块', '拼图', '图形验证', '短信验证码', '拖动'];
 const hasCaptcha = captchaKeywords.some(k => snap.includes(k));
 
+if (needLogin) {
+  console.log('请在浏览器中手动登录搜狐号...');
+  // 轮询等待登录态（sohuLogin 内部最长 10 分钟）
+}
 if (hasCaptcha) {
-  const ssR = await xb(['run', '--browser', 'chrome', 'screenshot', '--full'], 15000);
-  console.log('验证码截图:', JSON.parse(ssR.out).data?.result?.data?.path || '');
+  console.log('验证码：请在浏览器中完成验证');
   fs.writeFileSync(path.join(WORKSPACE, 'sohu_status.txt'), 'NEED_USER_VERIFY', 'utf8');
-  return; // 暂停
+  // 暂停，等待用户在浏览器处理
 }
 ```
 
@@ -233,8 +208,8 @@ if (hasCaptcha) {
 ## 发布流程（经验证可工作）
 
 ```javascript
-// 1. 发布按钮
-await xb(['run', '--browser', 'chrome', 'click', '@e63'], 15000);
+// 1. 点击发布（listitem "发布"）
+await ab(['click', '@' + pubRef], 15000);
 await sleep(5000);
 
 // 2. 确认框
@@ -244,7 +219,7 @@ if (snap2.includes('确定')) {
     if (line.includes('button') && line.includes('确定')) {
       const m = line.match(/ref=(e\d+)/);
       if (m) {
-        await xb(['run', '--browser', 'chrome', 'click', '@' + m[1]], 15000);
+        await ab(['click', '@' + m[1]], 15000);
         await sleep(5000);
         break;
       }
