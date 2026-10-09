@@ -19,7 +19,7 @@ agent_created: true
 | 依赖 | 位置 | 说明 |
 |------|------|------|
 | Chrome 正式版 | 自动探测（`SOHU_CHROME_PATH` 可覆盖） | 不杀用户浏览器，另起独立 profile 实例 |
-| playwright-core | `~/.workbuddy/binaries/node/workspace/node_modules` | 设 `OPENCLAW_NODE_MODULES` 指向该目录 |
+| playwright-core | 由 `isolated-browser/scripts/pathkit.js` 运行时自动探测 | 一般无需设置；要强制指定时设 `OPENCLAW_NODE_MODULES` |
 | 搜狐号登录态 | 调试 profile（`~/.workbuddy/skills/sohu-publisher/profiles/chrome`） | 失效时在窗口中用手机验证码重登 |
 
 ### 完整流程（4 步）
@@ -70,7 +70,7 @@ node scripts/sohu_publish_pw.js --article articles/current.json --image <配图.
 | 点不到「确定」 | 用 `p.positive-button:visible`，不是 `button` |
 | 配图上传失败 | `button.ql-image` → 弹窗 → `p.positive-button` 确认 → 轮询 `.ql-editor img[src^=http]` |
 | `connect ECONNREFUSED 9222` | Chrome 调试实例没起 → 跑 `launch-cdp-chrome.js` |
-| 找不到 playwright-core | 设 `OPENCLAW_NODE_MODULES=~/.workbuddy/binaries/node/workspace/node_modules` |
+| 找不到 playwright-core | 设 `OPENCLAW_NODE_MODULES` 指向含 playwright-core 的 node_modules；或跑 `node isolated-browser/scripts/pathkit.js --info` 看探测结果 |
 
 ## 配套资源
 

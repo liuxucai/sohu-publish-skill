@@ -42,6 +42,10 @@ function parseArgs(argv) {
 }
 
 function loadPlaywright() {
+  // 首选：公共解析器（不写死用户名 / 盘符 / 版本号）
+  try {
+    return require(path.resolve(__dirname, "..", "..", "isolated-browser", "scripts", "pathkit.js")).resolvePlaywright();
+  } catch (e) { /* 回退本地探测 */ }
   const home = process.env.USERPROFILE || process.env.HOME || "";
   const cands = [
     process.env.OPENCLAW_NODE_MODULES,
@@ -56,7 +60,7 @@ function loadPlaywright() {
 
 (async () => {
   const args = parseArgs(process.argv.slice(2));
-  const CDP = args.cdp || "9222";
+  const CDP = args.cdp || process.env.ISOB_CDP_PORT || "9222";
   const articlePath = args.article;
   if (!articlePath || !fs.existsSync(articlePath)) throw new Error("缺少 --article 或文件不存在");
   const article = JSON.parse(fs.readFileSync(articlePath, "utf8"));

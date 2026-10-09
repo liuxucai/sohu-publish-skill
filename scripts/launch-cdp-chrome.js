@@ -53,7 +53,7 @@ function findChrome() {
 
 (async () => {
   const args = parseArgs(process.argv.slice(2));
-  const port = args.port || "9222";
+  const port = args.port || process.env.ISOB_CDP_PORT || "9222";
   const profile =
     args.profile ||
     path.join(__dirname, "..", "profiles", "chrome");

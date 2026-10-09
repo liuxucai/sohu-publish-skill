@@ -14,7 +14,7 @@
 | # | 问题 | 等级 | 处置 |
 |---|------|------|------|
 | 1 | 源码与文档中硬编码作者本人的搜狐号手机号与密码（出现在 SKILL.md、login.js、publish.js、workflow.md、commands.md） | P1 敏感信息泄露 | 已全部移除，改为环境变量 / `config.json` 读取；示例改用占位符 |
-| 2 | 路径硬编码为作者机器（`C:\Users\菠萝\.qclaw\...`、`.agent-browser\tmp`） | P1 环境不兼容 | 改为 `scripts/config.js` 运行时解析，支持环境变量覆盖 |
+| 2 | 路径硬编码为作者机器（`C:\Users\<作者>\.qclaw\...`、`.agent-browser\tmp`） | P1 环境不兼容 | 已改为运行时解析（`isolated-browser/scripts/pathkit.js` + 环境变量覆盖） |
 | 3 | 依赖非标准工具 xb CLI（xbrowser 的 `xb.cjs`），非 WorkBuddy 内置能力 | 提示 | 2026-09-23 后续处置：本机 xb CLI 未初始化、实测不可用，**xb 路线相关文件（lib.js / login.js / publish.js / config.js / config.example.json / references/commands.md / templates/article.txt）已全部删除**，技术路线整体切换为 playwright-core 直连 CDP |
 | 4 | 启动前 `taskkill /F /IM chrome.exe` 会强制关闭用户全部 Chrome 窗口 | 提示 | 已在 SKILL.md 环境要求与已知限制中标注 |
 | 5 | 上游仓库的样本文章（publish.js 内置正文）被移出脚本 | 优化 | 改为从 `articles/current.json` 读取 |
