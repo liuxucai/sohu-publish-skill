@@ -1,0 +1,11 @@
+5.0.0
+2026-10-13 封面脚本化（--cover）+ 滑块墙复发记录：
+- sohu_publish_pw.js 新增 --cover：点 .cover-button 打开封面弹窗（.el-dialog__wrapper.select-dialog，
+  三 Tab：正文图片/本地上传/素材库）；--cover=某张正文配图时走「正文图片」Tab 直接勾选（零上传），
+  否则切「本地上传」Tab 喂弹窗内 input[type=file]；勾选后等「确定」解除 disable-button 再点。
+- 【关键坑】封面预览是 .pic-cover 的 CSS background-image（164x108），不是 <img>——
+  img 判据永远为空；验证改查 getComputedStyle(.pic-cover).backgroundImage 含 url(。
+- 【坑】填稿即自动存草稿（无论是否 --publish）：本次 3 次试运行留下 3 条同名废稿，
+  拟清理时内容管理页再次被腾讯防水墙滑块拦截（坑 #20 复发），草稿清理待人工过墙。
+- 实测：《陪表弟订婚车跑了两周，这些细节比价格更值得先问清》11:39 发布成功，
+  3 图 + 创作声明 + 封面缩略图生效（列表首条可见），状态「审核中」。
